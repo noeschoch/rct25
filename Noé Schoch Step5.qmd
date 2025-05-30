@@ -1,0 +1,211 @@
+---
+title: "RCT Step 5"
+format: html
+editor: visual
+---
+
+## 1. Comparisons
+
+::: {.callout-note appearance="simple" icon="false"}
+## Instructions
+
+Compare the total assets and equity ratios (`equity / total assets`)
+
+-   for all firms from your postal code
+-   with those of the entire Berlin population of firms
+:::
+
+Load and check data
+
+```{r}
+#| echo: true
+#| eval: true
+#| results: hide
+# Load data
+orbis_data <- readRDS("~/Documents/rct25/data/generated/orbis_panel_berlin.rds")
+
+# Check if data really only includes Berlin zip codes
+table(orbis_data$city_native)
+
+# Check how many NAs
+mean(is.na(orbis_data$postcode)) * 100
+mean(is.na(orbis_data$toas)) * 100
+mean(is.na(orbis_data$shfd)) * 100
+
+```
+
+Prepare comparison
+
+```{r}
+# Focus on 2021 for comparability
+orbis_2021 <- subset(orbis_data, year == 2021)
+
+# Create two subsets: 
+# "plänterwald" (zip code 12437) and "berlin" (all zip codes except 12437)
+zip_plänterwald_firms <- subset(orbis_2021, postcode == 12437)
+zip_berlin_firms <- subset(orbis_2021, postcode != 12437)
+
+# Create new column for equity ratio
+# equity ratio = equity / total assets
+zip_plänterwald_firms$equity_ratio <- zip_plänterwald_firms$shfd / zip_plänterwald_firms$toas
+zip_berlin_firms$equity_ratio <- zip_berlin_firms$shfd / zip_berlin_firms$toas
+
+# Calculate means
+mean_assets_plänterwald <- mean(zip_plänterwald_firms$toas, na.rm = TRUE)
+mean_assets_berlin <- mean(zip_berlin_firms$toas, na.rm = TRUE)
+mean_eq_plänterwald <- mean(zip_plänterwald_firms$equity_ratio, na.rm = TRUE)
+mean_eq_berlin <- mean(zip_berlin_firms$equity_ratio, na.rm = TRUE)
+
+# Calculate sds
+sd_assets_plänterwald <- sd(zip_plänterwald_firms$toas, na.rm = TRUE)
+sd_assets_berlin <- sd(zip_berlin_firms$toas, na.rm = TRUE)
+sd_eq_plänterwald <- sd(zip_plänterwald_firms$equity_ratio, na.rm = TRUE)
+sd_eq_berlin <- sd(zip_berlin_firms$equity_ratio, na.rm = TRUE)
+```
+
+Show comparison in table
+
+```{r, results='asis'}
+#| echo: true
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(kableExtra)
+library(knitr)
+library(scales)
+
+# Create dataframe (make sure rounding and format is correct)
+table_data <- data.frame(
+  Variable = c("Total Assets", "Equity Ratio"),
+  `Plänterwald Mean` = c(comma(round(mean_assets_plänterwald, 2)), round(mean_eq_plänterwald, 2)),
+  `Plänterwald SD` = c(comma(round(sd_assets_plänterwald, 2)), round(sd_eq_plänterwald, 2)),
+  `Berlin Mean` = c(comma(round(mean_assets_berlin, 2)), round(mean_eq_berlin, 2)),
+  `Berlin SD` = c(comma(round(sd_assets_berlin, 2)), round(sd_eq_berlin, 2))
+)
+
+# Create layout for the table
+table_html <- table_data %>%
+  kable(
+    format = "html",
+    escape = FALSE,
+    digits = 2,
+    caption = "Table 1: Comparison of Total Assets and Equity Ratio (2021)",
+    col.names = c("Variable", "Mean", "SD", "Mean", "SD"),
+    align = "lcccc"
+  ) %>%
+  add_header_above(c(" " = 1, "Plänterwald" = 2, "Berlin (Rest)" = 2)) %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover")) %>%
+  as.character()
+
+note_html <- "<div style='margin-top: 10px; font-size: 0.9em; color: #555;'>
+<strong>Note:</strong> This table shows summary statistics for firms located in Plänterwald (n = 48) compared to the rest of Berlin (n = 27,688) in fiscal year 2021, based on Orbis data. Total assets are reported in euros (€) with comma formatting. The equity ratio is calculated as shareholders’ funds divided by total assets, expressed as a percentage. Reported are group means and standard deviations (SD) excluding missing values (NA). All figures are based on the most recent available financial data for 2021.
+</div>"
+
+cat(table_html, note_html, sep = "\n")
+```
+
+## 2. Statistically significant differences
+
+::: {.callout-note appearance="simple" icon="false"}
+## Instructions
+
+Test for statistically significant differences.
+:::
+
+T-test for total assets and equity ratio
+
+```{r}
+# Calculate T-tests
+t_assets <- t.test(zip_plänterwald_firms$toas, zip_berlin_firms$toas, alternative = "two.sided", var.equal = FALSE)
+t_eq <- t.test(zip_plänterwald_firms$equity_ratio, zip_berlin_firms$equity_ratio, alternative = "two.sided", var.equal = FALSE)
+
+# prepare all values with correct rounding and formatting
+table_data <- data.frame(
+  Variable = c("Total Assets", "Equity Ratio"),
+  `Plänterwald Mean` = c(comma(round(mean_assets_plänterwald, 2)), round(mean_eq_plänterwald, 2)),
+  `Plänterwald SD` = c(comma(round(sd_assets_plänterwald, 2)), round(sd_eq_plänterwald, 2)),
+  `Berlin Mean` = c(comma(round(mean_assets_berlin, 2)), round(mean_eq_berlin, 2)),
+  `Berlin SD` = c(comma(round(sd_assets_berlin, 2)), round(sd_eq_berlin, 2)),
+  `t stat` = round(c(t_assets$statistic, t_eq$statistic), 3),
+  `df` = round(c(t_assets$parameter, t_eq$parameter), 0),
+  `95% CI Lower` = c(comma(round(t_assets$conf.int[1], 2)), round(t_eq$conf.int[1], 2)),
+  `95% CI Upper` = c(comma(round(t_assets$conf.int[2], 2)), round(t_eq$conf.int[2], 2)),
+  `p-value` = c(
+    ifelse(t_assets$p.value < 0.001, "<0.001", round(t_assets$p.value, 3)),
+    ifelse(t_eq$p.value < 0.001, "<0.001", round(t_eq$p.value, 3))
+  )
+)
+
+```
+
+-\> Will be added to first table in step 4
+
+## 3. Research Log
+
+::: {.callout-note appearance="simple" icon="false"}
+## Instructions
+
+Document and explain your research design decisions in your research log.
+:::
+
+-\> This can be found in research log file.
+
+## 4. Table
+
+::: {.callout-note appearance="simple" icon="false"}
+## Instructions
+
+Prepare an informative, self-explanatory table (including notes) that clearly communicates your findings.
+:::
+
+```{r results='asis'}
+library(kableExtra)
+library(dplyr)
+library(htmltools)
+
+table_html <- table_data %>%
+  kable(
+    format = "html",
+    escape = FALSE,
+    digits = 2,
+    caption = "Table 1: Comparison of Total Assets and Equity Ratio (2021)",
+    col.names = c("Variable", "Mean", "SD", "Mean", "SD", "t stat", "df", "95% CI Lower", "95% CI Upper", "p-value"),
+    align = "lcccccclcc"
+  ) %>%
+  add_header_above(c(" " = 1, "Plänterwald" = 2, "Berlin" = 2, "T-Test" = 5)) %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover")) %>%
+  as.character()
+
+note_html <- "<div style='margin-top: 10px; font-size: 0.9em; color: #555;'>
+<strong>Note:</strong> Notes: This table presents descriptive statistics for firms located in Plänterwald (n = 48) compared to the remaining Berlin-based firms (n = 27,688) for the fiscal year 2021, based on Orbis data. Total assets are reported in euros (€) and formatted using comma separators. The equity ratio is defined as shareholders’ funds divided by total assets, expressed as a percentage. Reported are means and standard deviations (SD) for both groups. Welch’s two-sample t-test was employed to compare group means, accounting for unequal variances. Reported statistics include t-values, degrees of freedom (df), p-values, and 95% confidence intervals (CI). The large SD in Berlin firms’ total assets and equity ratios likely reflects high variance, potentially due to outliers or distressed companies. All values are based on financial data from the year 2021.
+</div>"
+
+cat(table_html, note_html, sep = "\n")
+```
+
+PDF export of Table 2
+
+```{r}
+#| echo: true
+#| eval: false
+
+# Create second HTML file that only shows final table
+full_html <- paste0(
+  "<!DOCTYPE html>",
+  "<html><head><meta charset='utf-8'>",
+  "<title>Table 1</title>",
+  "<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.5.2/css/bootstrap.min.css'>",
+  "</head><body style='margin: 20px;'>",
+  table_html,
+  note_html,
+  "</body></html>"
+)
+
+writeLines(full_html, "Table_Step5V2.html")
+
+# Automatically export HTML as PDF
+library(pagedown)
+pagedown::chrome_print("Table_Step5.html", output = "Table_Step5.pdf")
+
+```
